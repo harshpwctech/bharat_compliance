@@ -1,0 +1,41 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2024-07-23 22:48:14.623068",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "item_wise_tds"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "fieldname": "item_wise_tds",
+   "fieldtype": "Check",
+   "label": "Enable Item wise TDS in Purchase Transactions"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2024-07-24 13:22:39.790024",
+ "modified_by": "Administrator",
+ "module": "Income Tax Bharat",
+ "name": "Tax Withholding Setting",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

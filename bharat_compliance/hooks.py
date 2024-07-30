@@ -114,19 +114,17 @@ app_license = "mit"
 # ---------------
 # Override standard doctype classes
 
-# override_doctype_class = {
-# 	"ToDo": "custom_app.overrides.CustomToDo"
-# }
+override_doctype_class = {
+	"Purchase Invoice": "bharat_compliance.overrides.purchase_invoice.CustomPurchaseInvoice"
+}
 
 # Document Events
 # ---------------
 # Hook on document methods and events
 
 # doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
+# 	"Purchase Invoice": {
+# 		"validate": "bharat_compliance.doctype_events.purchase_invoice.validate",
 # 	}
 # }
 
