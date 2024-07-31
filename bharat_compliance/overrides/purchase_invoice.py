@@ -20,12 +20,11 @@ from erpnext.accounts.doctype.tax_withholding_category.tax_withholding_category 
 class CustomPurchaseInvoice(PurchaseInvoice):
     def validate(self):
         super().validate()
+        self.set("tax_withholding_details", [])
         if self.item_wise_tds:
             self.custom_set_tax_withholding()
         else:
-             self.set("taxes", [])
-             self.set("tax_withholding_details", [])
-             super().set_tax_withholding()
+             return
     
     def custom_set_tax_withholding(self):
         if not self.apply_tds:
@@ -35,53 +34,57 @@ class CustomPurchaseInvoice(PurchaseInvoice):
                 "Supplier", self.supplier, "tax_withholding_category"
             )
 
-        if not (self.tax_withholding_category and self.item_wise_tds):
-            return
+        tax_withholding_categories = {}
+        for i in self.items:
+            if i.tax_withholding_category:
+                tax_withholding_categories.setdefault(i.tax_withholding_category, 0)
+                tax_withholding_categories[i.tax_withholding_category] += i.base_net_amount
+            else:
+                frappe.msgprint(
+                _(
+                    "Skipping Item {0} as there is no Tax Withholding Category set in it."
+                ).format(i.item_code)
+            )
+        if not tax_withholding_categories:
+            return super().calculate_taxes_and_totals()
+        self.tax_withholding_category = None
+        accounts = set()
+        tax_withholding_details = {}
+        for tax_withholding_category, net_amount in tax_withholding_categories.items():
+            tax_withholding_detail, advance_taxes, voucher_wise_amount = get_item_tax_withholding_details(
+                self, tax_withholding_category, net_amount
+            )
+            if not tax_withholding_detail:
+                continue
+            tax_withholding_data = {
+                "tax_withholding_category": tax_withholding_category,
+                "net_amount": net_amount,
+                "tax_withheld": tax_withholding_detail.get("tax_amount")
+            }
+            self.append("tax_withholding_details", tax_withholding_data)
+            self.allocate_advance_tds(tax_withholding_detail, advance_taxes)
+            tax_withholding_details.setdefault(tax_withholding_detail.get("account_head"), {"amount":0, "tax_rows": []})
+            tax_withholding_details[tax_withholding_detail.get("account_head")]["amount"] += tax_withholding_detail.get("tax_amount")
+            tax_withholding_details[tax_withholding_detail.get("account_head")]["tax_rows"].append(tax_withholding_detail)
+            
 
-        if self.item_wise_tds:
-            self.tax_withholding_category = None
-            tax_withholding_categories = {}
-            accounts = set()
-            self.tax_withholding_details = []
-            self.taxes = []
-            for i in self.items:
-                if i.tax_withholding_category:
-                    tax_withholding_categories.setdefault(i.tax_withholding_category, 0)
-                    tax_withholding_categories[i.tax_withholding_category] += i.base_net_amount
-                else:
-                    frappe.msgprint(
-                    _(
-                        "Skipping Item {0} as there is no Tax Withholding Category set in it."
-                    ).format(i.item_code)
-                )
-            if not tax_withholding_categories:
-                return super().calculate_taxes_and_totals()
-            for tax_withholding_category, net_amount in tax_withholding_categories.items():
-                tax_withholding_details, advance_taxes, voucher_wise_amount = get_item_tax_withholding_details(
-                    self, tax_withholding_category, net_amount
-                )
-                if not tax_withholding_details:
-                    continue
-                tax_withholding_data = {
-                    "tax_withholding_category": tax_withholding_category,
-                    "net_amount": net_amount,
-                    "tax_withheld": tax_withholding_details.get("tax_amount")
-                }
-                self.append("tax_withholding_details", tax_withholding_data)
-                self.allocate_advance_tds(tax_withholding_details, advance_taxes)
-                self.append("taxes", tax_withholding_details)
-                accounts.add(tax_withholding_details.get("account_head"))
-                ## Add pending vouchers on which tax was withheld
-
-                for voucher_no, voucher_details in voucher_wise_amount.items():
-                    self.append(
-                        "tax_withheld_vouchers",
-                        {
-                            "voucher_name": voucher_no,
-                            "voucher_type": voucher_details.get("voucher_type"),
-                            "taxable_amount": voucher_details.get("amount"),
-                        },
-                    )
+        for d in self.taxes:
+            for account, details in tax_withholding_details.items():
+                if d.account_head == account:
+                    d.update(details["tax_rows"][0])
+                    d.tax_amount = details["amount"]
+                    break
+            accounts.add(d.account_head)
+        ## Add pending vouchers on which tax was withheld
+        for voucher_no, voucher_details in voucher_wise_amount.items():
+            self.append(
+                "tax_withheld_vouchers",
+                {
+                    "voucher_name": voucher_no,
+                    "voucher_type": voucher_details.get("voucher_type"),
+                    "taxable_amount": voucher_details.get("amount"),
+                },
+            )
 
         to_remove = [
             d
@@ -419,17 +422,19 @@ def get_tds_amount(ldc, parties, inv, tax_details, vouchers, net_amount=0):
             )
             pi = frappe.qb.DocType("Purchase Invoice").as_("pi")
             td = frappe.qb.DocType("Tax Withholding Detail").as_("td")
-            item_wise_net_total = (
+            item_wise_net_total_query = (
                 frappe.qb.from_(pi)
                 .inner_join(td)
                 .on(pi.name == td.parent)
                 .select(Sum(td.net_amount).as_("amt"))
                 .where(
                     (pi.name.isin(vouchers or [""]))
-                    & (pi.apply_tds == 1)
                     & (pi.docstatus == 1)
                 )
-            ).run(as_dict=True)
+            )
+            if cint(tax_details.consider_party_ledger_amount):
+                item_wise_net_total_query.where(pi.apply_tds == 1)
+            item_wise_net_total = item_wise_net_total_query.run(as_dict=True)
             net_total += item_wise_net_total[0].amt or 0
             if inv.item_wise_tds:
                 net_total += net_amount
