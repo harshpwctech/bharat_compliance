@@ -39,6 +39,7 @@ def create_tds_custom_fields():
 				fieldtype="Link",
 				insert_after="apply_tds",
 				print_hide=1,
+				read_only=1,
 				options="Tax Withholding Category"
 			),
 		],

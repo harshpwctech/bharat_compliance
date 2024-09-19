@@ -21,7 +21,9 @@ class CustomPurchaseInvoice(PurchaseInvoice):
     def validate(self):
         super().validate()
         self.set("tax_withholding_details", [])
-        if self.item_wise_tds:
+        if self.apply_tds and self.item_wise_tds:
+            frappe.throw("Please select either 'Apply Tax Withholding Amount' or 'Apply Item wise Tax Withholding Amount'")
+        elif self.item_wise_tds:
             self.set_item_wise_tax_witholding_category()
             self.custom_set_tax_withholding()
         else:
@@ -41,13 +43,7 @@ class CustomPurchaseInvoice(PurchaseInvoice):
                 )
 
     def custom_set_tax_withholding(self):
-        if not self.apply_tds:
-            return
-        if self.apply_tds and not self.get("tax_withholding_category"):
-            self.tax_withholding_category = frappe.db.get_value(
-                "Supplier", self.supplier, "tax_withholding_category"
-            )
-
+        self.tax_withholding_category = None
         tax_withholding_categories = {}
         for i in self.items:
             if i.tax_withholding_category:
@@ -55,7 +51,6 @@ class CustomPurchaseInvoice(PurchaseInvoice):
                 tax_withholding_categories[i.tax_withholding_category] += i.base_net_amount
         if not tax_withholding_categories:
             return super().calculate_taxes_and_totals()
-        self.tax_withholding_category = None
         accounts = set()
         tax_withholding_details = {}
         for tax_withholding_category, net_amount in tax_withholding_categories.items():
