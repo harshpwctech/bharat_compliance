@@ -42,6 +42,16 @@ def create_tds_custom_fields():
 				options="Tax Withholding Category"
 			),
 		],
+		"Item Supplier": [
+			dict(
+				fieldname="tax_withholding_category",
+				label="Tax Withholding Category",
+				fieldtype="Link",
+				insert_after="supplier_part_no",
+				print_hide=1,
+				options="Tax Withholding Category"
+			),
+		]
 	}
 
 	create_custom_fields(custom_fields)

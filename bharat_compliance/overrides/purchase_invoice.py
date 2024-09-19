@@ -22,10 +22,24 @@ class CustomPurchaseInvoice(PurchaseInvoice):
         super().validate()
         self.set("tax_withholding_details", [])
         if self.item_wise_tds:
+            self.set_item_wise_tax_witholding_category()
             self.custom_set_tax_withholding()
         else:
              return
     
+    def set_item_wise_tax_witholding_category(self):
+        for i in self.items:
+            tax_withholding_category = frappe.db.get_value("Item Supplier", filters={"parent": i.item_code, "supplier": self.supplier}, fieldname="tax_withholding_category")
+            if tax_withholding_category:
+                i.tax_withholding_category = tax_withholding_category
+            else:
+                item_link = frappe.utils.get_link_to_form("Item", i.item_code)
+                frappe.msgprint(
+                    _(
+                        "Skipping Item {0} as no Tax Withholding Category is set in the 'Supplier Items' table against the Supplier {1}."
+                    ).format(item_link, self.supplier)
+                )
+
     def custom_set_tax_withholding(self):
         if not self.apply_tds:
             return
@@ -39,12 +53,6 @@ class CustomPurchaseInvoice(PurchaseInvoice):
             if i.tax_withholding_category:
                 tax_withholding_categories.setdefault(i.tax_withholding_category, 0)
                 tax_withholding_categories[i.tax_withholding_category] += i.base_net_amount
-            else:
-                frappe.msgprint(
-                _(
-                    "Skipping Item {0} as there is no Tax Withholding Category set in it."
-                ).format(i.item_code)
-            )
         if not tax_withholding_categories:
             return super().calculate_taxes_and_totals()
         self.tax_withholding_category = None
@@ -219,13 +227,6 @@ def get_invoice_vouchers(parties, tax_details, inv, party_type="Supplier"):
     voucher_wise_amount = {}
     vouchers = []
 
-    # filters = {
-    #     "company": inv.company,
-    #     frappe.scrub(party_type): ["in", parties],
-    #     "posting_date": ["between", (tax_details.from_date, tax_details.to_date)],
-    #     "is_opening": "No",
-    #     "docstatus": 1,
-    # }
     filters = [
         [doctype, "company", "=", inv.company],
         [doctype, frappe.scrub(party_type), "in", parties],
@@ -450,7 +451,7 @@ def get_tds_amount(ldc, parties, inv, tax_details, vouchers, net_amount=0):
                 supp_credit_amt, 0, ldc.certificate_limit, ldc.rate, tax_details
             )
         else:
-            tds_amount = tax_withholding_net_total * tax_details.rate / 100 if supp_credit_amt > 0 else 0
+            tds_amount = supp_credit_amt * tax_details.rate / 100 if supp_credit_amt > 0 else 0
 
     return tds_amount
 
