@@ -184,7 +184,7 @@ def get_tax_amount(party_type, parties, inv, tax_details, posting_date, pan_no=N
 
     tax_amount = 0
     if party_type == "Supplier":
-        ldc = get_lower_deduction_certificate(inv.company, tax_details, pan_no)
+        ldc = get_lower_deduction_certificate(inv.company, posting_date, tax_details, pan_no)
         if tax_deducted:
             if inv.item_wise_tds:
                 net_total = net_amount
